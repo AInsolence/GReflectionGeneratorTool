@@ -4,13 +4,28 @@ project(ReflectionGenerator VERSION 1.0.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Force Release build for generator to match LLVM libraries
+if(MSVC)
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MD")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MD")
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
+
 # Set output directories
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 # Find Clang
-find_package(Clang REQUIRED CONFIG)
+# Try to find Clang in the custom installation path first
+set(CLANG_DIR "C:/LLVM/install/lib/cmake/clang")
+if(EXISTS "${CLANG_DIR}/ClangConfig.cmake")
+    set(Clang_DIR "${CLANG_DIR}")
+    find_package(Clang REQUIRED CONFIG)
+else()
+    # Fallback to standard find_package
+    find_package(Clang REQUIRED CONFIG)
+endif()
 
 # If not found, try to find manually with explicit paths
 if(NOT Clang_FOUND)
