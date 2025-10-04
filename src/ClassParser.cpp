@@ -3,6 +3,10 @@
 #include <sstream>
 #include <algorithm>
 #include <cctype>
+#include <memory>
+#include <clang/Tooling/CompilationDatabase.h>
+#include <clang/AST/ASTContext.h>
+#include <clang/AST/RecordLayout.h>
 
 namespace ReflectionGenerator {
 
@@ -166,7 +170,7 @@ bool ReflectionASTVisitor::VisitMacroExpansion(clang::MacroExpansion* expansion)
         return true;
     }
     
-    std::string macroName = expansion->getName().str();
+    std::string macroName = expansion->getName()->getName().str();
     if (IsReflectionMacro(macroName)) {
         // Handle macro expansion
         // This is a simplified implementation
@@ -467,11 +471,25 @@ std::vector<ClassInfo> ClassParser::ParseFile(const std::string& filePath) {
     std::vector<std::string> args = BuildCompilerArgs(filePath);
     
     // Create tool
-    clang::tooling::FixedCompilationDatabase compilations(".", args);
-    clang::tooling::ClangTool tool(compilations, {filePath});
+    auto compilations = std::make_unique<clang::tooling::FixedCompilationDatabase>(".", args);
+    clang::tooling::ClangTool tool(*compilations, {filePath});
+    
+    // Create a custom factory
+    class ReflectionActionFactory : public clang::tooling::FrontendActionFactory {
+    public:
+        explicit ReflectionActionFactory(ReflectionData& data) : m_data(data) {}
+        
+        std::unique_ptr<clang::FrontendAction> create() override {
+            return std::make_unique<ReflectionFrontendAction>(m_data);
+        }
+        
+    private:
+        ReflectionData& m_data;
+    };
     
     // Run the tool
-    int result = tool.run(clang::tooling::newFrontendActionFactory<ReflectionFrontendAction>(data).get());
+    ReflectionActionFactory factory(data);
+    int result = tool.run(&factory);
     
     if (result != 0) {
         std::cerr << "Error parsing file: " << filePath << "\n";

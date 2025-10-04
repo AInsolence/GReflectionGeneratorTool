@@ -12,6 +12,33 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # Find Clang
 find_package(Clang REQUIRED CONFIG)
 
+# If not found, try to find manually with explicit paths
+if(NOT Clang_FOUND)
+    # Set explicit paths to your LLVM installation
+    set(CLANG_INCLUDE_DIR "C:/LLVM/install/include")
+    set(CLANG_LIBRARY "C:/LLVM/install/lib/libclang.lib")
+    set(CLANG_TOOLS_DIR "C:/LLVM/install/bin")
+    set(LLVM_INCLUDE_DIR "C:/LLVM/install/include")
+    set(LLVM_LIB_DIR "C:/LLVM/install/lib")
+    
+    # Check if files exist
+    if(EXISTS "${CLANG_INCLUDE_DIR}/clang-c/Index.h" AND EXISTS "${CLANG_LIBRARY}")
+        message(STATUS "Found Clang manually: ${CLANG_INCLUDE_DIR}, ${CLANG_LIBRARY}")
+        set(Clang_FOUND TRUE)
+        set(CLANG_INCLUDE_DIRS ${CLANG_INCLUDE_DIR})
+        set(CLANG_LIBRARIES ${CLANG_LIBRARY})
+        
+        # Add LibTooling include directories
+        include_directories(${LLVM_INCLUDE_DIR})
+        include_directories(${LLVM_INCLUDE_DIR}/clang)
+        include_directories(${LLVM_INCLUDE_DIR}/llvm)
+        
+        message(STATUS "LibTooling paths set: ${LLVM_INCLUDE_DIR}, ${LLVM_LIB_DIR}")
+    else()
+        message(FATAL_ERROR "Clang not found at C:/LLVM/install/")
+    endif()
+endif()
+
 # Include directories
 include_directories(${CLANG_INCLUDE_DIRS})
 
@@ -23,12 +50,20 @@ set(SOURCES
     src/main.cpp
     src/ClassParser.cpp
     src/CodeGenerator.cpp
-    src/ReflectionAST.cpp
     src/FileScanner.cpp
 )
 
 # Create executable
 add_executable(reflect_gen ${SOURCES})
+
+# Suppress Clang warnings
+if(MSVC)
+    target_compile_options(reflect_gen PRIVATE
+        /wd4805  # unsafe mix of type 'unsigned int' and type 'bool'
+        /wd4291  # no matching operator delete found
+        /wd4834  # discarding return value
+    )
+endif()
 
 # Link libraries
 target_link_libraries(reflect_gen
@@ -51,50 +86,16 @@ target_link_libraries(reflect_gen
     clangToolingSyntax
     clangIndex
     clangFormat
-    clang
-    clang-cpp
 )
+
+# Add library search path
+if(LLVM_LIB_DIR)
+    target_link_directories(reflect_gen PRIVATE ${LLVM_LIB_DIR})
+    message(STATUS "Added library search path: ${LLVM_LIB_DIR}")
+endif()
 
 # Set target properties
 set_target_properties(reflect_gen PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
     VERSION ${PROJECT_VERSION}
-)
-
-# Install target
-install(TARGETS reflect_gen
-    RUNTIME DESTINATION bin
-)
-
-# Install headers (for library usage)
-install(DIRECTORY src/
-    DESTINATION include/ReflectionGenerator
-    FILES_MATCHING PATTERN "*.h"
-)
-
-# Package configuration
-include(CMakePackageConfigHelpers)
-write_basic_package_version_file(
-    "${CMAKE_CURRENT_BINARY_DIR}/ReflectionGeneratorConfigVersion.cmake"
-    VERSION ${PROJECT_VERSION}
-    COMPATIBILITY AnyNewerVersion
-)
-
-configure_package_config_file(
-    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ReflectionGeneratorConfig.cmake.in"
-    "${CMAKE_CURRENT_BINARY_DIR}/ReflectionGeneratorConfig.cmake"
-    INSTALL_DESTINATION lib/cmake/ReflectionGenerator
-)
-
-install(FILES
-    "${CMAKE_CURRENT_BINARY_DIR}/ReflectionGeneratorConfig.cmake"
-    "${CMAKE_CURRENT_BINARY_DIR}/ReflectionGeneratorConfigVersion.cmake"
-    DESTINATION lib/cmake/ReflectionGenerator
-)
-
-# Export target
-install(EXPORT ReflectionGeneratorTargets
-    FILE ReflectionGeneratorTargets.cmake
-    NAMESPACE ReflectionGenerator::
-    DESTINATION lib/cmake/ReflectionGenerator
 )
